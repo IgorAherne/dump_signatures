@@ -26,10 +26,6 @@ The script is run from the command line and accepts two optional arguments:
 `--scan_directory <path>`: The path to the directory you want to scan. Defaults to the current directory `(.)`
 `--output_file <path>`: The name of the file to save the summary to. Defaults to ``./code_summary.txt`
 
-## running:
-Use `..` to make it recursively look subfolders of the parent directory</br>
-`python summarize_code.py` --".."
-
 ---
 
 ### Examples
