@@ -170,8 +170,11 @@ def analyze_csharp_node(node, source_bytes, summary, indent_level=0):
             else:
                  method_name_text = "[UnknownOrComplexMethodName]"
 
-
         params_text = get_node_text(params_node, source_bytes, default="()") # Default to empty params "()"
+        # Post-process to clean up excessive newlines and fix indentation
+        if '\n' in params_text:
+            next_line_indent = indent + "  "
+            params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
 
         return_type_text = get_node_text(return_type_node, source_bytes).strip()
 
@@ -189,6 +192,10 @@ def analyze_csharp_node(node, source_bytes, summary, indent_level=0):
         params_node = node.child_by_field_name("parameters")
         constructor_name_text = get_node_text(name_node, source_bytes, default="[UnnamedConstructor]")
         params_text = get_node_text(params_node, source_bytes, default="()")
+        # Post-process to clean up excessive newlines and fix indentation
+        if '\n' in params_text:
+            next_line_indent = indent + "  "
+            params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
         summary.append(f"{indent}CONSTRUCTOR: {constructor_name_text}{params_text}")
 
     elif node_type == "destructor_declaration":
@@ -284,6 +291,10 @@ def analyze_javascript_node(node, source_bytes, summary, indent_level=0):
         params_node = node.child_by_field_name("parameters")
         func_name = get_node_text(name_node, source_bytes, default="[anonymous_function]")
         params_text = get_node_text(params_node, source_bytes, default="()")
+        # Post-process to clean up excessive newlines and fix indentation
+        if '\n' in params_text:
+            next_line_indent = indent + "  "
+            params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
         summary.append(f"{indent}FUNC: {func_name}{params_text}") 
     elif node_type == "class_declaration":
         name_node = node.child_by_field_name("name")
@@ -302,10 +313,14 @@ def analyze_javascript_node(node, source_bytes, summary, indent_level=0):
         
         method_name = get_node_text(name_node, source_bytes, default="[unnamed_method]")
         params_text = get_node_text(params_node, source_bytes, default="()")
+        # Post-process to clean up excessive newlines and fix indentation
+        if '\n' in params_text:
+            next_line_indent = indent + "  "
+            params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
         kind_text = get_node_text(kind_node, source_bytes) 
 
         prefix = "METHOD"
-        if method_name == "constructor": 
+        if method_name == "constructor":
             prefix = "CONSTRUCTOR"
         elif kind_text == "get": prefix = "GETTER"
         elif kind_text == "set": prefix = "SETTER"
@@ -414,6 +429,91 @@ def process_cshtml(file_path, html_parser, js_parser, cs_parser, summary):
     except Exception as e:
         summary.append(f"  Error processing {file_path}: {e}")
 
+
+def analyze_python_node(node, source_bytes, summary, indent_level=0):
+    indent = "  " * indent_level
+    node_type = node.type
+
+    # Recurse through the top-level module
+    if node_type == "module":
+        for child in node.children:
+            analyze_python_node(child, source_bytes, summary, indent_level)
+    
+    # Handle imports: `from module import something`
+    elif node_type == "import_from_statement":
+        module_name_node = node.child_by_field_name("module_name")
+        module_name = get_node_text(module_name_node, source_bytes)
+        
+        # This part handles `from module import a, b, c` or `from module import *`
+        imported_names_node = node.child_by_field_name("name")
+        imported_names = get_node_text(imported_names_node, source_bytes)
+        
+        summary.append(f"{indent}IMPORT: from {module_name} import {imported_names}")
+
+    # Handle imports: `import module`
+    elif node_type == "import_statement":
+        name_node = node.child_by_field_name("name")
+        module_name = get_node_text(name_node, source_bytes)
+        summary.append(f"{indent}IMPORT: {module_name}")
+
+    # Handle decorated definitions (e.g., @app.route)
+    elif node_type == "decorated_definition":
+        for child in node.children:
+            if child.type == "decorator":
+                summary.append(f"{indent}DECORATOR: @{get_node_text(child.child_by_field_name('name'), source_bytes)}")
+        # The actual function/class is the last child
+        definition_node = node.children[-1]
+        analyze_python_node(definition_node, source_bytes, summary, indent_level)
+
+    # Handle functions: `def my_func(a, b):`
+    elif node_type == "function_definition":
+        name_node = node.child_by_field_name("name")
+        params_node = node.child_by_field_name("parameters")
+        func_name = get_node_text(name_node, source_bytes, "[lambda]")
+        params_text = get_node_text(params_node, source_bytes, "()")
+        # Post-process to clean up excessive newlines and fix indentation
+        if '\n' in params_text:
+            next_line_indent = indent + "  "
+            params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
+        summary.append(f"{indent}FUNC: {func_name}{params_text}")
+        
+        # Optionally, recurse into the function body for nested functions/classes
+        body_node = node.child_by_field_name("body")
+        if body_node:
+            for child in body_node.children:
+                analyze_python_node(child, source_bytes, summary, indent_level + 1)
+    
+    # Handle classes: `class MyClass(BaseClass):`
+    elif node_type == "class_definition":
+        name_node = node.child_by_field_name("name")
+        class_name = get_node_text(name_node, source_bytes)
+        
+        superclasses_node = node.child_by_field_name("superclasses")
+        superclasses_text = get_node_text(superclasses_node, source_bytes, "")
+        
+        summary.append(f"{indent}CLASS: {class_name}{superclasses_text}")
+        
+        body_node = node.child_by_field_name("body")
+        if body_node:
+            for child in body_node.children:
+                analyze_python_node(child, source_bytes, summary, indent_level + 1)
+
+
+def process_python(file_path, parser, summary):
+    """Wrapper function to process a single Python file."""
+    summary.append(f"\n--- FILE: {file_path} (Python) ---")
+    if not parser:
+        summary.append("  Python parser not available. Skipping.")
+        return
+    try:
+        with open(file_path, "rb") as f:
+            source_bytes = f.read()
+        tree = parser.parse(source_bytes)
+        analyze_python_node(tree.root_node, source_bytes, summary)
+    except Exception as e:
+        summary.append(f"  Error processing {file_path}: {e}")
+
+
 # --- Main Processing Logic ---
 def main():
     parser_args = argparse.ArgumentParser(description="Extract code structure summary from .cs, .js, .cshtml, and .py files.")
@@ -428,10 +528,10 @@ def main():
 
     loaded_capsules = load_pip_languages()
     if not loaded_capsules: 
-        print("Failed to load any languages from pip packages. Exiting.")
+        print("Failed to load any languages from pip packages. Exiting.") 
         return
 
-    CSHARP_LANG_CAPSULE, JAVASCRIPT_LANG_CAPSULE, HTML_LANG_CAPSULE = loaded_capsules
+    CSHARP_LANG_CAPSULE, JAVASCRIPT_LANG_CAPSULE, HTML_LANG_CAPSULE, PYTHON_LANG_CAPSULE = loaded_capsules
 
     # These will now be actual tree_sitter.Language objects
     CSHARP_LANGUAGE_OBJ = None # Renamed to avoid confusion with the Language class itself
@@ -456,6 +556,12 @@ def main():
             print(f"Wrapped HTML capsule into Language object. Type: {type(HTML_LANGUAGE_OBJ)}, Module: {inspect.getmodule(HTML_LANGUAGE_OBJ)}")
         except Exception as e:
             print(f"Error wrapping HTML capsule with Language(): {e}")
+    if PYTHON_LANG_CAPSULE:
+        try:
+            PYTHON_LANGUAGE_OBJ = Language(PYTHON_LANG_CAPSULE)
+            print(f"Wrapped Python capsule into Language object. Type: {type(PYTHON_LANGUAGE_OBJ)}, Module: {inspect.getmodule(PYTHON_LANGUAGE_OBJ)}")
+        except Exception as e:
+            print(f"Error wrapping Python capsule with Language(): {e}")
 
 
     cs_parser = None
@@ -506,6 +612,22 @@ def main():
     else:
         print("HTML parser will not be available (either capsule failed to load or wrapping failed).")
 
+    py_parser = None
+    if PYTHON_LANGUAGE_OBJ: # Check the wrapped Language object
+        py_parser = Parser()
+        print(f"Created py_parser. Type: {type(py_parser)}, Module: {inspect.getmodule(py_parser)}")
+        print(f"Attempting to set PYTHON_LANGUAGE_OBJ (type: {type(PYTHON_LANGUAGE_OBJ)}) to py_parser.language.")
+        try:
+            py_parser.language = PYTHON_LANGUAGE_OBJ
+            print("Successfully set Python language to py_parser.")
+        except TypeError as te:
+            print(f"TypeError during 'py_parser.language = PYTHON_LANGUAGE_OBJ': {te}")
+            print(f"Is PYTHON_LANGUAGE_OBJ an instance of tree_sitter.Language? {isinstance(PYTHON_LANGUAGE_OBJ, Language)}")
+            print(f"Type of tree_sitter.Language that py_parser expects: {Language}")
+            raise
+    else:
+        print("Python parser will not be available (either capsule failed to load or wrapping failed).")
+
     project_summary = []
 
     for root, dirs, files in os.walk(args.scan_directory, topdown=True):
@@ -522,6 +644,8 @@ def main():
                  process_javascript(file_path, js_parser, project_summary)
             elif file.endswith(".cshtml"):
                 process_cshtml(file_path, html_parser, js_parser, cs_parser, project_summary)
+            elif file.endswith(".py"):
+                process_python(file_path, py_parser, project_summary)
 
     try:
         with open(args.output_file, "w", encoding="utf-8") as f:
@@ -530,6 +654,9 @@ def main():
         print(f"Summary written to {os.path.abspath(args.output_file)}")
     except Exception as e:
         print(f"Error writing summary to file '{args.output_file}': {e}")
+
+
+
 
 if __name__ == "__main__":
     ts_version_str = "unknown"
