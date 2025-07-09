@@ -7,6 +7,11 @@ import sys # For debugging paths
 import inspect # For debugging types
 
 
+# Simplified excluded_dir_names: no longer need to worry about excluding grammar source folders
+# as we are not using them directly for building.
+excluded_dir_names = ['.git', 'obj', 'bin', 'venv', '.vs', 'node_modules', 'tmp', 'temp', 'tmp_project_files']
+
+
 # Language Loading
 def load_pip_languages():
     """
@@ -16,47 +21,54 @@ def load_pip_languages():
     CSHARP_LANG_CAPSULE = None
     JAVASCRIPT_LANG_CAPSULE = None
     HTML_LANG_CAPSULE = None
+    PYTHON_LANG_CAPSULE = None # --- NEW ---
+
     print("Attempting to load languages from installed pip packages...")
-    print(f"Python sys.path: {sys.path}") # DEBUG: Check Python's search path
-    print(f"tree_sitter.Language type: {type(Language)}") # DEBUG
+    print(f"Python sys.path: {sys.path}") 
 
     try:
-        from tree_sitter_c_sharp import language as ts_csharp_lang_func # Renamed for clarity
-        print(f"Imported ts_csharp_lang_func: {ts_csharp_lang_func}")
+        from tree_sitter_c_sharp import language as ts_csharp_lang_func 
         CSHARP_LANG_CAPSULE = ts_csharp_lang_func() 
-        print(f"Successfully loaded C# language capsule. Type: {type(CSHARP_LANG_CAPSULE)}, Module: {inspect.getmodule(CSHARP_LANG_CAPSULE)}")
+        print("Successfully loaded C# language capsule.")
     except ImportError:
-        print("Warning: tree-sitter-c-sharp package not found or could not be imported. C# parsing will be unavailable.")
+        print("Warning: tree-sitter-c-sharp package not found. C# parsing will be unavailable.")
     except Exception as e:
         print(f"Error loading C# language from package: {e}")
 
     try:
         from tree_sitter_javascript import language as ts_javascript_lang_func
-        print(f"Imported ts_javascript_lang_func: {ts_javascript_lang_func}")
         JAVASCRIPT_LANG_CAPSULE = ts_javascript_lang_func()
-        print(f"Successfully loaded JavaScript language capsule. Type: {type(JAVASCRIPT_LANG_CAPSULE)}, Module: {inspect.getmodule(JAVASCRIPT_LANG_CAPSULE)}")
+        print("Successfully loaded JavaScript language capsule.")
     except ImportError:
-        print("Warning: tree-sitter-javascript package not found or could not be imported. JavaScript parsing will be unavailable.")
+        print("Warning: tree-sitter-javascript package not found. JavaScript parsing will be unavailable.")
     except Exception as e:
         print(f"Error loading JavaScript language from package: {e}")
 
     try:
         from tree_sitter_html import language as ts_html_lang_func
-        print(f"Imported ts_html_lang_func: {ts_html_lang_func}")
         HTML_LANG_CAPSULE = ts_html_lang_func()
-        print(f"Successfully loaded HTML language capsule. Type: {type(HTML_LANG_CAPSULE)}, Module: {inspect.getmodule(HTML_LANG_CAPSULE)}")
+        print("Successfully loaded HTML language capsule.")
     except ImportError:
-        print("Warning: tree-sitter-html package not found or could not be imported. HTML/CSHTML parsing will be unavailable.")
+        print("Warning: tree-sitter-html package not found. HTML/CSHTML parsing will be unavailable.")
     except Exception as e:
         print(f"Error loading HTML language from package: {e}")
 
-    if not (CSHARP_LANG_CAPSULE or JAVASCRIPT_LANG_CAPSULE or HTML_LANG_CAPSULE):
+    try:
+        from tree_sitter_python import language as ts_python_lang_func
+        PYTHON_LANG_CAPSULE = ts_python_lang_func()
+        print("Successfully loaded Python language capsule.")
+    except ImportError:
+        print("Warning: tree-sitter-python package not found. Python parsing will be unavailable.")
+    except Exception as e:
+        print(f"Error loading Python language from package: {e}")
+
+    if not any([CSHARP_LANG_CAPSULE, JAVASCRIPT_LANG_CAPSULE, HTML_LANG_CAPSULE, PYTHON_LANG_CAPSULE]):
         print("Error: No tree-sitter language packages could be loaded.")
         print("Please ensure you have installed the necessary packages, e.g.:")
-        print("  pip install tree-sitter-c-sharp tree-sitter-javascript tree-sitter-html")
+        print("  pip install tree-sitter-c-sharp tree-sitter-javascript tree-sitter-html tree-sitter-python")
         return None
 
-    return CSHARP_LANG_CAPSULE, JAVASCRIPT_LANG_CAPSULE, HTML_LANG_CAPSULE
+    return CSHARP_LANG_CAPSULE, JAVASCRIPT_LANG_CAPSULE, HTML_LANG_CAPSULE, PYTHON_LANG_CAPSULE
 
 
 # --- Helper to get text from a node ---
@@ -495,9 +507,6 @@ def main():
         print("HTML parser will not be available (either capsule failed to load or wrapping failed).")
 
     project_summary = []
-    # Simplified excluded_dir_names: no longer need to worry about excluding grammar source folders
-    # as we are not using them directly for building.
-    excluded_dir_names = ['.git', 'obj', 'bin', 'venv', '.vs', 'node_modules', 'tmp_project_files']
 
     for root, dirs, files in os.walk(args.scan_directory, topdown=True):
         # Prune excluded directories
