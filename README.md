@@ -33,7 +33,7 @@ You can adjust the `excluded_dir_names` inside the `summarize_code.py` to skip a
 
 ### Examples
 
-**1. Scan the current directory:**
+**1. Scan the current directory (and all its subfolders):**
 (If you place the script in the root of your project)
 ```bash
 python summarize_code.py
@@ -45,7 +45,7 @@ python summarize_code.py
 python summarize_code.py --scan_directory ..
 ```
 
-**3. Scan a specific project folder and define a custom output file:**
+**3. Scan a specific project folder (and all its subfolders) and define a custom output file:**
 ```bash
 python summarize_code.py --scan_directory "C:\Users\You\Projects\MyWebApp" --output_file "my_webapp_summary.txt"
 ```
