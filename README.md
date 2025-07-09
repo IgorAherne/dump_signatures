@@ -26,6 +26,9 @@ The script is run from the command line and accepts two optional arguments:
 `--scan_directory <path>`: The path to the directory you want to scan. Defaults to the current directory `(.)`
 `--output_file <path>`: The name of the file to save the summary to. Defaults to ``./code_summary.txt`
 
+By default it ignores folders `venv, git, obj, bin, .vs, node_modules, tmp, temp`</br>
+You can adjust the `excluded_dir_names` inside the `summarize_code.py` to skip additional folders.
+
 ---
 
 ### Examples
