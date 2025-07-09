@@ -406,7 +406,7 @@ def process_cshtml(file_path, html_parser, js_parser, cs_parser, summary):
 def main():
     parser_args = argparse.ArgumentParser(description="Extract code structure summary from .cs, .js, .cshtml, and .py files.")
     parser_args.add_argument("--scan_directory", help="Directory to scan recursively (e.g., '.').", default=".")
-    parser_args.add_argument("--output_file", help="File to write the summary to.", default="./code_summary.txt")
+    parser_args.add_argument("--output_file", help="File to write the summary to.", default="./CODE_SUMMARY.txt")
     args = parser_args.parse_args()
 
     output_dir = os.path.dirname(args.output_file)
