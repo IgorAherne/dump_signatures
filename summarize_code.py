@@ -266,7 +266,7 @@ def analyze_csharp_node(node, source_bytes, summary, indent_level=0):
 
 
 def process_csharp(file_path, parser, summary):
-    summary.append(f"\n-- FILE: {file_path} (C#) --")
+    summary.append(f"\n-- FILE: {file_path} --")
     if not parser:
         summary.append("  C# parser not available. Skipping.")
         return
@@ -344,7 +344,7 @@ def analyze_javascript_node(node, source_bytes, summary, indent_level=0):
                     summary.append(f"{indent}VARIABLE ({kind_token_text}): {name_text}")
 
 def process_javascript(file_path, parser, summary):
-    summary.append(f"\n-- FILE: {file_path} (JavaScript) --")
+    summary.append(f"\n-- FILE: {file_path} --")
     if not parser:
         summary.append("  JavaScript parser not available. Skipping.")
         return
@@ -402,7 +402,7 @@ def analyze_cshtml_node(node, source_bytes, summary, js_parser, cs_parser, inden
 
 
 def process_cshtml(file_path, html_parser, js_parser, cs_parser, summary):
-    summary.append(f"\n-- FILE: {file_path} (CSHTML) --")
+    summary.append(f"\n-- FILE: {file_path} --")
     if not html_parser:
         summary.append("  HTML parser not available. Skipping CSHTML file.")
         return
@@ -501,7 +501,7 @@ def analyze_python_node(node, source_bytes, summary, indent_level=0):
 
 def process_python(file_path, parser, summary):
     """Wrapper function to process a single Python file."""
-    summary.append(f"\n-- FILE: {file_path} (Python) --")
+    summary.append(f"\n-- FILE: {file_path} --")
     if not parser:
         summary.append("  Python parser not available. Skipping.")
         return
