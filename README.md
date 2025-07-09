@@ -8,8 +8,8 @@ Understands:
 - C# files
 - Python files
 - JavaScript 
-- ignores the rest
 - CSHTML
+- ignores the rest
 
 ## Installation:
 
