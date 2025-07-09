@@ -266,7 +266,7 @@ def analyze_csharp_node(node, source_bytes, summary, indent_level=0):
 
 
 def process_csharp(file_path, parser, summary):
-    summary.append(f"\n--- FILE: {file_path} (C#) ---")
+    summary.append(f"\n-- FILE: {file_path} (C#) --")
     if not parser:
         summary.append("  C# parser not available. Skipping.")
         return
