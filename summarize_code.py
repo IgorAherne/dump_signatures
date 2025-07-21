@@ -570,23 +570,21 @@ def analyze_cpp_node(node, source_bytes, summary, includes_list, indent_level=0)
             func_name = get_node_text(name_node, source_bytes, '[unnamed_func]')
             params_text = get_node_text(params_node, source_bytes, '()')
             params_text = re.sub(r'\s*[\r\n]+\s*', ' ', params_text).strip()
+            
             return_type = get_node_text(type_node, source_bytes, '').strip()
+            if return_type == "void":
+                return_type = "" # Omit void return type
 
             prefix = "FUNC"
-            if return_type == "":
-                if func_name.startswith("~"):
+            # Heuristic for constructor/destructor
+            if not return_type:
+                 if func_name.startswith("~"):
                     prefix = "DESTRUCTOR"
-                else:
+                 else:
                     prefix = "CONSTRUCTOR"
-            
-            # *** BUG FIX STARTS HERE ***
-            # The original line had a `.strip()` that removed the leading indentation.
-            # This has been replaced with logic that preserves the indent.
-            if return_type:
-                summary.append(f"{indent}{prefix}: {return_type} {func_name}{params_text}")
-            else:
-                summary.append(f"{indent}{prefix}: {func_name}{params_text}")
-            # *** BUG FIX ENDS HERE ***
+
+            full_sig = f"{return_type} {func_name}{params_text}".strip()
+            summary.append(f"{indent}{prefix}: {full_sig}")
 
     elif node_type == 'declaration' or node_type == 'field_declaration':
         func_declarator = next((c for c in node.children if 'function_declarator' in c.type), None)
@@ -596,11 +594,15 @@ def analyze_cpp_node(node, source_bytes, summary, includes_list, indent_level=0)
             name_node = func_declarator.child_by_field_name('declarator')
 
             type_text = get_node_text(type_node, source_bytes).strip()
+            if type_text == "void":
+                type_text = "" # Omit void return type
+
             func_name = get_node_text(name_node, source_bytes, '[unnamed_func]')
             params_text = get_node_text(params_node, source_bytes, '()')
             params_text = re.sub(r'\s*[\r\n]+\s*', ' ', params_text).strip()
 
-            summary.append(f"{indent}FUNC_DECL: {type_text} {func_name}{params_text}")
+            full_sig = f"{type_text} {func_name}{params_text}".strip()
+            summary.append(f"{indent}FUNC_DECL: {full_sig}")
             return
 
         specifier_node = next((c for c in node.children if c.type in ['class_specifier', 'struct_specifier']), None)
@@ -626,7 +628,7 @@ def analyze_cpp_node(node, source_bytes, summary, includes_list, indent_level=0)
 
 
 def process_cpp(file_path, parser, summary):
-    """Wrapper function to process a single C/C++/Header file with result grouping."""
+    """Wrapper function to process a single C/C++/Header file with intelligent grouping."""
     if not parser:
         return
     try:
@@ -646,51 +648,99 @@ def process_cpp(file_path, parser, summary):
         if includes_list:
             summary.append(f"  INCLUDES: {', '.join(sorted(list(set(includes_list))))}")
 
+        # This helper function groups a block of lines (like a class body)
+        def format_block(lines, base_indent):
+            groups = defaultdict(list)
+            for line in lines:
+                match = re.match(r'^\s*(?P<type>\w+):\s*(?P<text>.*)', line)
+                if match:
+                    groups[match.group('type')].append(match.group('text').strip())
+            
+            output_lines = []
+            # Define a consistent order for printing member types
+            type_order = ["FIELD", "CONSTRUCTOR", "DESTRUCTOR", "FUNC", "FUNC_DECL"]
+            for type_key in type_order:
+                if type_key in groups:
+                    output_lines.append(f"{base_indent}{type_key}:")
+                    for item in sorted(groups[type_key]):
+                        output_lines.append(f"{base_indent}  {item}")
+            # Add any other types not in the standard order
+            for type_key, items in sorted(groups.items()):
+                if type_key not in type_order:
+                    output_lines.append(f"{base_indent}{type_key}:")
+                    for item in sorted(items):
+                         output_lines.append(f"{base_indent}  {item}")
+            return output_lines
+
+        # --- Main Processing ---
         final_body = []
-        i = 0
-        while i < len(file_summary_raw):
-            line = file_summary_raw[i]
-            match = re.match(r'^(?P<indent>\s*)(?P<type>\w+):\s*(?P<text>.*)', line)
-
-            if not match:
-                final_body.append(line)
-                i += 1
-                continue
-
-            indent = match.group('indent')
-            current_type = match.group('type')
-            current_text = match.group('text').strip()
-            
-            non_groupable_types = ['CLASS', 'STRUCT', 'UNION', 'NAMESPACE', 'FORWARD_DECL']
-            if current_type in non_groupable_types:
-                final_body.append(line)
-                i += 1
-                continue
-
-            group_items = [current_text]
-            j = i + 1
-            while j < len(file_summary_raw):
-                next_line = file_summary_raw[j]
-                next_match = re.match(r'^(?P<indent>\s*)(?P<type>\w+):\s*(?P<text>.*)', next_line)
-                
-                if next_match and next_match.group('indent') == indent and next_match.group('type') == current_type:
-                    group_items.append(next_match.group('text').strip())
-                    j += 1
-                else:
-                    break
-            
-            final_body.append(f"{indent}{current_type}:")
-            for item_text in sorted(list(set(group_items))):
-                final_body.append(f"{indent}  {item_text}")
-            
-            i = j
         
+        # First, handle .cpp file definitions by grouping them into classes
+        class_definitions = defaultdict(list)
+        other_lines = []
+        for line in file_summary_raw:
+            if not line.startswith(' ') and '::' in line:
+                match = re.match(r'^(?P<type>\w+):\s*(?P<signature>.*)', line)
+                if match:
+                    sig = match.group('signature')
+                    try:
+                        # Split "return_type class_name::func_name(args)"
+                        qualifiers, member_name = sig.rsplit('::', 1)
+                        qualifiers_parts = qualifiers.split()
+                        class_name = qualifiers_parts[-1]
+                        return_type = " ".join(qualifiers_parts[:-1])
+
+                        # Reconstruct the signature without the class name
+                        clean_sig = f"{return_type} {member_name}".strip()
+                        class_definitions[class_name].append(f"  {match.group('type')}: {clean_sig}")
+                        continue
+                    except ValueError:
+                        # Fallback for parsing errors
+                        pass
+            other_lines.append(line)
+
+        # Process the remaining lines (from headers or globals)
+        i = 0
+        while i < len(other_lines):
+            line = other_lines[i]
+            # Match top-level containers like CLASS, STRUCT, NAMESPACE
+            match = re.match(r'^(?P<indent>\s*)(?P<type>CLASS|STRUCT|NAMESPACE):\s*(?P<name>.*)', line)
+            if match:
+                final_body.append(line)
+                block_indent_len = len(match.group('indent'))
+                block_body_lines = []
+                # Collect all lines belonging to this block
+                j = i + 1
+                while j < len(other_lines):
+                    next_line = other_lines[j]
+                    next_line_indent_match = re.match(r'^(\s*)', next_line)
+                    next_line_indent_len = len(next_line_indent_match.group(1)) if next_line_indent_match else 0
+                    
+                    if next_line_indent_len > block_indent_len:
+                        block_body_lines.append(next_line)
+                        j += 1
+                    else:
+                        break # End of block
+                
+                if block_body_lines:
+                    child_indent = match.group('indent') + '  '
+                    final_body.extend(format_block(block_body_lines, child_indent))
+                
+                i = j # Move main index past the processed block
+            else:
+                final_body.append(line)
+                i += 1
+
+        # Append the formatted .cpp class definitions
+        for class_name, lines in sorted(class_definitions.items()):
+            final_body.append(f"CLASS: {class_name}")
+            final_body.extend(format_block(lines, "  "))
+
         summary.extend(final_body)
 
     except Exception as e:
         summary.append(f"\n-- FILE: {file_path} (C/C++) --")
         summary.append(f"  Error processing {file_path}: {e}")
-
 
 # --- Main Processing Logic ---
 def main():
@@ -731,7 +781,7 @@ def main():
             print(f"Wrapped HTML capsule into Language object.")
         except Exception as e:
             print(f"Error wrapping HTML capsule with Language(): {e}")
-    if PYTHON_LANG_CAPSULE:
+    if PYTHON_LANGUAGE_OBJ:
         try:
             PYTHON_LANGUAGE_OBJ = Language(PYTHON_LANG_CAPSULE)
             print(f"Wrapped Python capsule into Language object.")
@@ -792,6 +842,7 @@ def main():
                 process_python(file_path, py_parser, project_summary)
             elif file.endswith((".cpp", ".h", ".c", ".hpp")):
                 process_cpp(file_path, cpp_parser, project_summary)
+
     try:
         with open(args.output_file, "w", encoding="utf-8") as f:
             if project_summary and project_summary[0].strip() == "":
@@ -800,8 +851,6 @@ def main():
         print(f"Summary written to {os.path.abspath(args.output_file)}")
     except Exception as e:
         print(f"Error writing summary to file '{args.output_file}': {e}")
-
-
 
 if __name__ == "__main__":
     ts_version_str = "unknown"
