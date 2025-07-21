@@ -696,10 +696,10 @@ def process_cpp(file_path, parser, summary):
 def main():
     parser_args = argparse.ArgumentParser(description="Extract code structure summary from .cs, .js, .cshtml, and .py files.")
     parser_args.add_argument("--scan_directory", help="Directory to scan recursively (e.g., '.').", default=".")
-    parser_args.add_argument("--output", help="File to write the summary to.", default="./CODE_SUMMARY.txt")
+    parser_args.add_argument("--output_file", help="File to write the summary to.", default="./CODE_SUMMARY.txt")
     args = parser_args.parse_args()
 
-    output_dir = os.path.dirname(args.output)
+    output_dir = os.path.dirname(args.output_file)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Created output directory: {output_dir}")
@@ -793,13 +793,13 @@ def main():
             elif file.endswith((".cpp", ".h", ".c", ".hpp")):
                 process_cpp(file_path, cpp_parser, project_summary)
     try:
-        with open(args.output, "w", encoding="utf-8") as f:
+        with open(args.output_file, "w", encoding="utf-8") as f:
             if project_summary and project_summary[0].strip() == "":
                 project_summary.pop(0)
             f.write("\n".join(project_summary))
-        print(f"Summary written to {os.path.abspath(args.output)}")
+        print(f"Summary written to {os.path.abspath(args.output_file)}")
     except Exception as e:
-        print(f"Error writing summary to file '{args.output}': {e}")
+        print(f"Error writing summary to file '{args.output_file}': {e}")
 
 
 
