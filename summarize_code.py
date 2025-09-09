@@ -781,7 +781,7 @@ def main():
             print(f"Wrapped HTML capsule into Language object.")
         except Exception as e:
             print(f"Error wrapping HTML capsule with Language(): {e}")
-    if PYTHON_LANGUAGE_OBJ:
+    if PYTHON_LANG_CAPSULE:
         try:
             PYTHON_LANGUAGE_OBJ = Language(PYTHON_LANG_CAPSULE)
             print(f"Wrapped Python capsule into Language object.")
@@ -848,9 +848,9 @@ def main():
             if project_summary and project_summary[0].strip() == "":
                 project_summary.pop(0)
             f.write("\n".join(project_summary))
-        print(f"Summary written to {os.path.abspath(args.output_file)}")
+        print(f"\nSummary written to {os.path.abspath(args.output_file)}")
     except Exception as e:
-        print(f"Error writing summary to file '{args.output_file}': {e}")
+        print(f"\nError writing summary to file '{args.output_file}': {e}")
 
 if __name__ == "__main__":
     ts_version_str = "unknown"
