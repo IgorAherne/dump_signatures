@@ -97,46 +97,34 @@ def analyze_csharp_node(node, source_bytes, summary, usings_list, indent_level=0
             analyze_csharp_node(node.child(child_idx), source_bytes, summary, usings_list, indent_level)
 
     elif node_type == "using_directive":
+        # (Using logic remains same, just compacting logic here for brevity in the snippet)
         alias_node = node.child_by_field_name("alias") 
         name_node = node.child_by_field_name("name")  
         static_node = node.child_by_field_name("static")
         
         using_parts = []
-
-        if static_node:
-            using_parts.append("static")
-
-        alias_name_str = ""
+        if static_node: using_parts.append("static")
         if alias_node:
-            alias_identifier_node = alias_node.child_by_field_name("name") 
-            alias_name_str = get_node_text(alias_identifier_node, source_bytes).strip()
-            if alias_name_str:
-                using_parts.append(f"{alias_name_str} =")
+            alias_identifier = alias_node.child_by_field_name("name") 
+            alias_text = get_node_text(alias_identifier, source_bytes).strip()
+            if alias_text: using_parts.append(f"{alias_text} =")
 
         namespace_str = get_node_text(name_node, source_bytes).strip()
-        if namespace_str:
-            using_parts.append(namespace_str)
+        if namespace_str: using_parts.append(namespace_str)
         
         final_using_text = " ".join(filter(None, using_parts))
-
         if final_using_text:
             usings_list.append(final_using_text)
         else:
-            raw_directive_text = get_node_text(node, source_bytes)
-            cleaned_text = raw_directive_text.strip()
-            if cleaned_text.lower().startswith("using "):
-                cleaned_text = cleaned_text[len("using "):].strip()
-            if cleaned_text.endswith(";"):
-                cleaned_text = cleaned_text[:-1].strip()
-            
-            if cleaned_text:
-                usings_list.append(cleaned_text)
-
+            # Fallback for complex usings
+            raw = get_node_text(node, source_bytes).strip()
+            raw = re.sub(r'^using\s+', '', raw).rstrip(';')
+            if raw: usings_list.append(raw)
 
     elif node_type == "namespace_declaration":
         name_node = node.child_by_field_name("name")
         namespace_name = get_node_text(name_node, source_bytes, default="[UnknownNamespace]")
-        summary.append(f"{indent}NAMESPACE: {namespace_name}")
+        summary.append(f"{indent}namespace {namespace_name}")
         body_node = node.child_by_field_name("body")
         if body_node:
             for child_idx in range(body_node.child_count):
@@ -149,7 +137,9 @@ def analyze_csharp_node(node, source_bytes, summary, usings_list, indent_level=0
         if type_params_node:
             name_str += get_node_text(type_params_node, source_bytes)
 
-        summary.append(f"{indent}{node_type.split('_')[0].upper()}: {name_str}")
+        keyword = node_type.split('_')[0] # class, struct, interface...
+        summary.append(f"{indent}{keyword} {name_str}")
+        
         body_node = node.child_by_field_name("body")
         if body_node:
             for child_idx in range(body_node.child_count):
@@ -157,21 +147,19 @@ def analyze_csharp_node(node, source_bytes, summary, usings_list, indent_level=0
 
     elif node_type == "method_declaration":
         return_type_node = node.child_by_field_name("type")
-        name_identifier_node = node.child_by_field_name("name")
-        explicit_specifier_node = node.child_by_field_name("explicit_interface_specifier")
+        name_node = node.child_by_field_name("name")
+        explicit_specifier = node.child_by_field_name("explicit_interface_specifier")
         params_node = node.child_by_field_name("parameters")
 
-        method_name_text = ""
-        if name_identifier_node:
-            method_name_text = get_node_text(name_identifier_node, source_bytes)
-        elif explicit_specifier_node:
-            method_name_text = get_node_text(explicit_specifier_node, source_bytes)
+        method_name = ""
+        if name_node:
+            method_name = get_node_text(name_node, source_bytes)
+        elif explicit_specifier:
+            method_name = get_node_text(explicit_specifier, source_bytes)
         else:
-            found_identifier = next((c for c in node.children if c.type == 'identifier'), None)
-            if found_identifier:
-                 method_name_text = get_node_text(found_identifier, source_bytes)
-            else:
-                 method_name_text = "[UnknownOrComplexMethodName]"
+            # Fallback scan
+            found_id = next((c for c in node.children if c.type == 'identifier'), None)
+            method_name = get_node_text(found_id, source_bytes) if found_id else "[UnknownMethod]"
 
         params_text = get_node_text(params_node, source_bytes, default="()")
         if '\n' in params_text:
@@ -179,89 +167,107 @@ def analyze_csharp_node(node, source_bytes, summary, usings_list, indent_level=0
             params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
 
         return_type_text = get_node_text(return_type_node, source_bytes).strip()
+        if not return_type_text:
+            return_type_text = "void" # Default to void if parsing fails or it's void
 
-        if not return_type_text and method_name_text != "[UnknownOrComplexMethodName]":
-            summary.append(f"{indent}METH: {method_name_text}{params_text}")
-        elif not return_type_text and method_name_text == "[UnknownOrComplexMethodName]":
-             summary.append(f"{indent}METH: [UnknownSignature]")
-        else: 
-            summary.append(f"{indent}METH: {return_type_text} {method_name_text}{params_text}")
+        summary.append(f"{indent}{return_type_text} {method_name}{params_text}")
 
     elif node_type == "constructor_declaration":
         name_node = node.child_by_field_name("name")
         params_node = node.child_by_field_name("parameters")
-        constructor_name_text = get_node_text(name_node, source_bytes, default="[UnnamedConstructor]")
+        name_text = get_node_text(name_node, source_bytes, default="[Constructor]")
         params_text = get_node_text(params_node, source_bytes, default="()")
         if '\n' in params_text:
             next_line_indent = indent + "  "
             params_text = re.sub(r'\s*[\r\n]+\s*', '\n' + next_line_indent, params_text.strip())
-        summary.append(f"{indent}CONSTRUCTOR: {constructor_name_text}{params_text}")
+        summary.append(f"{indent}{name_text}{params_text}")
 
     elif node_type == "destructor_declaration":
         name_node = node.child_by_field_name("name")
         params_node = node.child_by_field_name("parameters")
-        class_name_for_destructor = get_node_text(name_node, source_bytes, default="[UnnamedClass]")
+        name_text = get_node_text(name_node, source_bytes, default="[Destructor]")
         params_text = get_node_text(params_node, source_bytes, default="()")
-        summary.append(f"{indent}DESTRUCTOR: ~{class_name_for_destructor}{params_text}")
-
+        summary.append(f"{indent}~{name_text}{params_text}")
 
     elif node_type == "field_declaration":
+        # Robust Logic from previous step
         type_node = node.child_by_field_name("type")
-        type_text = get_node_text(type_node, source_bytes, default="<unknown_type>")
-        var_declaration_node = node.child_by_field_name("declaration")
-        if var_declaration_node and var_declaration_node.type == "variable_declaration":
-            for i in range(var_declaration_node.child_count):
-                child_node = var_declaration_node.child(i)
-                if child_node.type == "variable_declarator":
-                    name_node_for_field = child_node.child_by_field_name("name")
-                    name_text = get_node_text(name_node_for_field, source_bytes, default="[UnnamedField]")
-                    summary.append(f"{indent}FIELD: {type_text} {name_text}")
-        else: 
-            summary.append(f"{indent}FIELD: {type_text} [FieldWithComplexDeclaration]")
+        declarators = []
 
+        # 1. Direct children
+        for child in node.children:
+            if child.type == "variable_declarator":
+                declarators.append(child)
+        
+        # 2. Nested variable_declaration (for attributes/modern grammar)
+        if not declarators:
+            for child in node.children:
+                if child.type == "variable_declaration":
+                    if not type_node: type_node = child.child_by_field_name("type")
+                    for sub_child in child.children:
+                        if sub_child.type == "variable_declarator":
+                            declarators.append(sub_child)
+
+        type_text = get_node_text(type_node, source_bytes, default="<unknown_type>").strip()
+
+        if declarators:
+            for decl in declarators:
+                name_node = decl.child_by_field_name("name")
+                name_text = get_node_text(name_node, source_bytes, default="[UnnamedField]")
+                # Format: "Type Name;"
+                summary.append(f"{indent}{type_text} {name_text};")
+        else:
+            summary.append(f"{indent}{type_text} [ComplexField];")
 
     elif node_type == "property_declaration":
         type_node = node.child_by_field_name("type")
-        type_text = get_node_text(type_node, source_bytes, default="<unknown_type>")
-        
-        name_identifier_node = node.child_by_field_name("name")
-        explicit_specifier_node = node.child_by_field_name("explicit_interface_specifier")
+        name_node = node.child_by_field_name("name")
+        explicit_specifier = node.child_by_field_name("explicit_interface_specifier")
 
+        type_text = get_node_text(type_node, source_bytes, default="<unknown_type>")
         name_text = ""
-        if name_identifier_node:
-            name_text = get_node_text(name_identifier_node, source_bytes)
-        elif explicit_specifier_node:
-            name_text = get_node_text(explicit_specifier_node, source_bytes)
-        
-        if name_text:
-            summary.append(f"{indent}PROP: {type_text} {name_text}")
+        if name_node:
+            name_text = get_node_text(name_node, source_bytes)
+        elif explicit_specifier:
+            name_text = get_node_text(explicit_specifier, source_bytes)
         else:
-            summary.append(f"{indent}PROP: {type_text} [UnnamedOrComplexProperty]")
+            name_text = "[UnnamedProperty]"
+        
+        # Format: "Type Name { get; }" to distinguish from field
+        summary.append(f"{indent}{type_text} {name_text} {{ get; }}")
 
     elif node_type == "event_field_declaration": 
         type_node = node.child_by_field_name("type")
-        type_text = get_node_text(type_node, source_bytes, default="<unknown_type>")
-        var_declaration_node = node.child_by_field_name("declaration")
-        if var_declaration_node and var_declaration_node.type == "variable_declaration":
-            for i in range(var_declaration_node.child_count):
-                child_node = var_declaration_node.child(i)
-                if child_node.type == "variable_declarator":
-                    name_node_for_event = child_node.child_by_field_name("name")
-                    name_text = get_node_text(name_node_for_event, source_bytes, default="[UnnamedEvent]")
-                    summary.append(f"{indent}EVENT: {type_text} {name_text}")
-        else:
-            summary.append(f"{indent}EVENT: {type_text} [EventWithComplexDeclaration]")
+        declarators = []
+        for child in node.children:
+             if child.type == "variable_declarator": declarators.append(child)
+        if not declarators:
+             for child in node.children:
+                 if child.type == "variable_declaration":
+                     if not type_node: type_node = child.child_by_field_name("type")
+                     for sub_child in child.children:
+                         if sub_child.type == "variable_declarator": declarators.append(sub_child)
 
+        type_text = get_node_text(type_node, source_bytes, default="<unknown_type>").strip()
+
+        if declarators:
+            for decl in declarators:
+                name_node = decl.child_by_field_name("name")
+                name_text = get_node_text(name_node, source_bytes, default="[UnnamedEvent]")
+                summary.append(f"{indent}event {type_text} {name_text};")
+        else:
+            summary.append(f"{indent}event {type_text} [ComplexEvent];")
 
     elif node_type == "delegate_declaration":
         return_type_node = node.child_by_field_name("return_type")
         name_node = node.child_by_field_name("name")
         params_node = node.child_by_field_name("parameters")
         
-        return_type_text = get_node_text(return_type_node, source_bytes, default="<void_or_unknown_type>")
-        delegate_name = get_node_text(name_node, source_bytes, default="[UnnamedDelegate]")
+        ret_text = get_node_text(return_type_node, source_bytes, default="void")
+        name_text = get_node_text(name_node, source_bytes, default="[Delegate]")
         params_text = get_node_text(params_node, source_bytes, default="()")
-        summary.append(f"{indent}DELEGATE: {return_type_text} {delegate_name}{params_text}")
+        
+        summary.append(f"{indent}delegate {ret_text} {name_text}{params_text};")
 
 
 def process_csharp(file_path, parser, summary):
