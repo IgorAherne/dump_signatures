@@ -58,18 +58,19 @@ python summarize_code.py --scan_directory "C:\Users\You\Projects\MyWebApp" --out
 The generated `code_summary.txt` will look something like this:
 
 ```
---- FILE: ..\itslol_website\Controllers\HomeController.cs (C#) ---
-USING: ItsLolCom.Data
-USING: ItsLolCom.Extensions
-NAMESPACE: ItsLolCom.Controllers
-  CLASS: HomeController
-    FIELD: <unknown_type> [FieldWithComplexDeclaration]
-    CONSTRUCTOR: HomeController(ApplicationDbContext context, ILogger<HomeController> logger, ...)
-    METH: CalculateHotnessScore(int score, DateTime createdAt)
-    METH: Index(string feed = "hot", int page = 1)
-
--- FILE: ..\itslol_website\wwwroot\js\site.js (JavaScript) --
-FUNC: openAdvancedSearch()
-FUNC: toggleAdvancedSearch(event)
-FUNC: votePost(button, voteType)
+-- FILE: .\..\Assets\_gm\Features\StableDiffusion\Controlnet\ControlNetUnit_UI.cs (C#) --
+  USINGS: System, System.Collections, TMPro, UnityEngine, UnityEngine.UI
+namespace spz
+  class ControlNetUnit_UI
+    bool _isForPreviewOnly;
+    Toggle _lowVRAM_toggle;
+    ControlNetUnit_Dropdowns dropdowns { get; }
+    ControlNetUnit_Dropdowns _dropdowns;
+    ControlNetUnit_ImagesDisplay _imgsDisplay;
+    CircleSlider_Snapping_UI _endingControl_step;
+    GameObject _headerMenu_go;
+    bool _wasCreatedViaLoad;
+    bool isActivated { get; }
+    bool hasAtLeastSomeModel { get; }
+    void isReferencePreprocessor()
 ```
